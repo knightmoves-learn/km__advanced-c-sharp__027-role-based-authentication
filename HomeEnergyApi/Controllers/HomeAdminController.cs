@@ -24,7 +24,7 @@ namespace HomeEnergyApi.Controllers
             this.mapper = mapper;
         }
 
-        [Authorize (Policy = "AdminOnly")]
+        [Authorize]
         [HttpPost]
         public IActionResult CreateHome([FromBody] HomeDto homeDto)
         {
