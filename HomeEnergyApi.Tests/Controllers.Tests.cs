@@ -10,8 +10,6 @@ public class ControllersTests
     : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly WebApplicationFactory<Program> _factory;
-    private HomeDto testHomeDto = new();
-    private UtilityProviderDto testUtilityProviderDto = new();
     public ControllersTests(WebApplicationFactory<Program> factory)
     {
         _factory = factory;
@@ -35,10 +33,7 @@ public class ControllersTests
     {
         var client = _factory.CreateClient();
 
-        UtilityProviderDto postTestUtilityProviderDto = testUtilityProviderDto;
-        postTestUtilityProviderDto.Name = "test energy";
-        postTestUtilityProviderDto.ProvidedUtilities = new List<string>() { "electric", "natural gas" };
-
+        UtilityProviderDto postTestUtilityProviderDto = BuildTestUtilProvDto("test energy", new List<string>() { "electric", "natural gas" });
         string strPostTestUtilityProviderDto = JsonSerializer.Serialize(postTestUtilityProviderDto);
 
         HttpRequestMessage sendRequest = new HttpRequestMessage(HttpMethod.Post, url);
@@ -55,7 +50,6 @@ public class ControllersTests
 
         bool nameMatch = responseContent.Contains("\"name\":\"test energy\"");
         bool provUtilitiesMatch = responseContent.Contains("\"providedutilities\":[\"electric\",\"natural gas\"]");
-
         bool hasExpected = nameMatch && provUtilitiesMatch;
 
         Assert.True(hasExpected,
@@ -70,46 +64,38 @@ public class ControllersTests
         var client = _factory.CreateClient();
         HttpRequestMessage sendRequest = new HttpRequestMessage(HttpMethod.Post, url);
 
+        TokenDto tokenRequestContent = new();
+        tokenRequestContent.Role = "Admin";
+        string tokenRequestContentStr = JsonSerializer.Serialize(tokenRequestContent);
+
+        sendRequest.Content = new StringContent(tokenRequestContentStr,
+                                        Encoding.UTF8,
+                                        "application/json");
+
         var response = await client.SendAsync(sendRequest);
-        var responseStr = await response.Content.ReadAsStringAsync();
 
         Assert.True((int)response.StatusCode == 200,
             $"HomeEnergyApi did not return \"200: Ok\" HTTP Response Code on POST request at {url}; instead received {(int)response.StatusCode}: {response.StatusCode}");
-
-        bool validToken = responseStr.Length == 292 && responseStr.Contains("{\"token\":\"");
-
-        // if (validToken)
-        // {
-        //     jwtBearerToken = responseStr.Trim(new char[] { '{', '}', '"' }).Substring(8);
-        // }
-
-        Assert.True(validToken,
-            $"The provided bearer token was not in a valid format\nReceived token : {responseStr}");
     }
 
     [Theory, TestPriority(4)]
     [InlineData("/admin/Homes")]
     public async Task HomeEnergyApiCanPOSTAHomeGivenAValidHomeDto(string url)
     {
-        string jwtBearerToken = await GetBearerToken();
-
+        string jwtBearerToken = await GetBearerToken("Admin");
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("Authorization", "Bearer " + jwtBearerToken);
 
-        HomeDto postTestHomeDto = testHomeDto;
-        postTestHomeDto.OwnerLastName = "Test";
-        postTestHomeDto.StreetAddress = "123 Test St.";
-        postTestHomeDto.City = "Test City";
-        postTestHomeDto.MonthlyElectricUsage = 123;
-
+        HomeDto postTestHomeDto = BuildTestHomeDto("Test", "123 Test St.", "Test City", 123);
         string strPostTestHomeDto = JsonSerializer.Serialize(postTestHomeDto);
-        HttpRequestMessage sendRequest = new HttpRequestMessage(HttpMethod.Post, url);
 
+        HttpRequestMessage sendRequest = new HttpRequestMessage(HttpMethod.Post, url);
         sendRequest.Content = new StringContent(strPostTestHomeDto,
                                                 Encoding.UTF8,
                                                 "application/json");
 
         var response = await client.SendAsync(sendRequest);
+
         Assert.True((int)response.StatusCode == 201,
             $"HomeEnergyApi did not return \"201: Created\" HTTP Response Code on POST request at {url}; instead received {(int)response.StatusCode}: {response.StatusCode}");
 
@@ -140,18 +126,9 @@ public class ControllersTests
     public async Task HomeEnergyApiCanPUTAHomeGivenAValidHomeDto(string url)
     {
         var client = _factory.CreateClient();
+        url = url + $"/{await GetIdForPutTest()}";
 
-        var getAllResponse = await client.GetAsync("/Homes");
-        string getAllResponseStr = await getAllResponse.Content.ReadAsStringAsync();
-        dynamic? getAllResponseObj = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(getAllResponseStr);
-        string urlId = getAllResponseObj?[getAllResponseObj.Count - 1].Id ?? "";
-        url = url + $"/{urlId}";
-
-        HomeDto putTestHomeDto = testHomeDto;
-        putTestHomeDto.OwnerLastName = "Putty";
-        putTestHomeDto.StreetAddress = "123 Put St.";
-        putTestHomeDto.City = "Put City";
-        putTestHomeDto.MonthlyElectricUsage = 456;
+        HomeDto putTestHomeDto = BuildTestHomeDto("Putty", "123 Put St.", "Put City", 456);
 
         string strPutTestHomeDto = JsonSerializer.Serialize(putTestHomeDto);
 
@@ -184,7 +161,9 @@ public class ControllersTests
     [InlineData("/Homes/Bang")]
     public async Task HomeEnergyApiAppliesGlobalExceptionFilter(string url)
     {
+        string jwtBearerToken = await GetBearerToken("User");
         var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("Authorization", "Bearer " + jwtBearerToken);
 
         var bangResponse = await client.GetAsync(url);
         string bangResponseStr = await bangResponse.Content.ReadAsStringAsync();
@@ -197,22 +176,50 @@ public class ControllersTests
             $"HomeEnergyApi did not return the expected result on GET request at {url}\nExpected:{expected}\nReceived:{bangResponseStr}");
     }
 
-    public string BuildBase64EncodedAuthString(string username, string password)
-    {
-        var authenticationString = $"{username}:{password}";
-        var base64EncodedAuthenticationString = Convert.ToBase64String(System.Text.ASCIIEncoding.ASCII.GetBytes(authenticationString));
-
-        return base64EncodedAuthenticationString;
-    }
-
-    public async Task<string> GetBearerToken()
+    public async Task<string> GetBearerToken(string role)
     {
         var client = _factory.CreateClient();
         HttpRequestMessage sendRequest = new HttpRequestMessage(HttpMethod.Post, "/Authentication/token");
+
+        TokenDto tokenRequestContent = new();
+        tokenRequestContent.Role = role;
+        string tokenRequestContentStr = JsonSerializer.Serialize(tokenRequestContent);
+
+        sendRequest.Content = new StringContent(tokenRequestContentStr,
+                                        Encoding.UTF8,
+                                        "application/json");
 
         var response = await client.SendAsync(sendRequest);
         var responseStr = await response.Content.ReadAsStringAsync();
 
         return responseStr.Trim(new char[] { '{', '}', '"' }).Substring(8);
+    }
+
+    public async Task<string> GetIdForPutTest()
+    {
+        var client = _factory.CreateClient();
+
+        var getAllResponse = await client.GetAsync("/Homes");
+        string getAllResponseStr = await getAllResponse.Content.ReadAsStringAsync();
+        dynamic? getAllResponseObj = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(getAllResponseStr);
+        return getAllResponseObj?[getAllResponseObj.Count - 1].Id ?? "";
+    }
+
+    public UtilityProviderDto BuildTestUtilProvDto(string name, List<string> provUtils)
+    {
+        UtilityProviderDto build = new UtilityProviderDto();
+        build.Name = name;
+        build.ProvidedUtilities = provUtils;
+        return build;
+    }
+
+    public HomeDto BuildTestHomeDto(string ownerLastName, string streetAddress, string city, int monthlyElectricUsage)
+    {
+        HomeDto build = new HomeDto();
+        build.OwnerLastName = ownerLastName;
+        build.StreetAddress = streetAddress;
+        build.City = city;
+        build.MonthlyElectricUsage = monthlyElectricUsage;
+        return build;
     }
 }

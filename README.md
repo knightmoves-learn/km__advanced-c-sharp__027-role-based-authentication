@@ -1,58 +1,31 @@
-# 025 JWT Authentication
+# 025 Role Based Authentication
 
 ## Lecture
 
-[![# Jwt Authentication (Part 1)](https://img.youtube.com/vi/98NJzlKtWew/0.jpg)](https://www.youtube.com/watch?v=98NJzlKtWew)
-[![# Jwt Authentication (Part 2)](https://img.youtube.com/vi/9xNA228pPD8/0.jpg)](https://www.youtube.com/watch?v=9xNA228pPD8)
+[![# Role Based Authentication](https://img.youtube.com/vi/RTUTtORZ8nM/0.jpg)](https://www.youtube.com/watch?v=RTUTtORZ8nM)
 
 ## Instructions
 
-Prior to you starting this assignment the commands `dotnet remove package AspNetCore.Authentication.Basic` and `dotnet add package Microsoft.AspNetCore.Authentication.JwtBearer --version 8.0.0` have been run, you do NOT need to run these yourself
-
-You will also find your JWT Authentication configuration pre-filled for you to view in `HomeEnergyApi/secrets.json`
+In `HomeEnergyApi/Program.cs`
+- Add an option to the call to `AddAuthorization` to create a policy named "AdminOnly" and which requires the role "Admin"
+- Add an option to the call to `AddAuthorization` to create a policy named "UserOnly" and which requires the role "User"
 
 In `HomeEnergyApi/Controllers/AuthenticationController.cs`
-- Create a public class `AuthenticationController` implementing `ControllerBase`
-    - Create three private readonly properties `_issuer`, `_audience` and `_secret` of type `string`
-    - Create a constructor taking one argument of type `IConfiguration`
-        - In the body of the constructor, set `_issuer` `_audience` and `_secret` to the issuer, audience and secret from `secrets.json`
-    - Create a `Token()` method, returning an `IActionResult` and designate it as a HTTP POST route at `/Authentication/token` with the attribute `[HttpPost("token")]`
-        - `Token()` should set a `string` variable to the result of `GenerateJwtToken()` (which we will define later)
-        - `Token()` should return `Ok()` with the result of `GenerateJwtToken()` supplied as an argument inside of an anonymous object
-    - Create a `GenerateJwt()` method with a return type of `string`
-        - `GenerateJwt()` should create a variable holding a new `SymmetricSecurityKey` with the `byte[]` value of `_secret` passed into its constructor
-        - `GenerateJwt()` should create a variable holding a new `SigningCredentials` with the newly created `SymmentricSecurityKey` and `SecurityAlgorithms.HmacSha256` passed into its constructor 
-        - `GenerateJwt()` should create a new array holding two `Claim` objects
-            - The first `Claim` should have `JwtRegisteredClaimNames.Sub` and `"maria@knightmove.com"` passed into its constructor
-            - The second `Claim` should have `JwtRegisteredClaimNames.Jti` and a new `Guid` as type `string` passed into its constructor
-        - `GenerateJwt()` should create a variable holding a new `JwtSecurityToken` witth the following passed into its constructor...
-            - `_issuer` as "issuer"
-            - `_audience` as "audience"
-            - The the variable holding the `Claim` array you created as "claims"
-            - An hour from the current time as "expires" (An hour from when the code runs, not the time you are writing this)
-            - The variable holding the `SigningCrendentials` you created as "signingCredentials"
-        - `GenerateJwt()` should return `new JwtSecurityTokenHandler().WriteToken()` with the variable holding the `JwtSecurityToken` you created passed into `WriteToken()`
+- Add an argument to the `Token()` method, which gets a `TokenDto` from the body of the HTTP request
+- Add logic to the `Token()` method, that will return `BadRequest("Role is required.")` from the method if the `Role` property on the passed `TokenDto` is null or empty
+- Pass the `Role` property on the passed `TokenDto` to the call to `GenerateJwtToken()`
+- Add an argument of type `string` to `GenerateJwtToken()`
+- Inside of `GenerateJwtToken()` add a new `Claim` to the array holding other `Claim`s, passing `ClaimTypes.Role` and the newly created `string` argument into it's constructor
 
-In `HomeEnergyApi/Authorization/JwtAuthenticationHandler.cs` (Note: This file has been renamed for you)
-- Rename the class `BasicAuthenticationHandler` to `JwtAuthenticationHandler`
-- Remove the existing properties and create three private readonly properties `_issuer`, `_audience` and `_secret` of type `string`
-- Replace the body of the constructor with code that sets `_issuer`, `_audience` and `_secret` to the value of Jwt.Issuer, Jwt.Audience, and Jwt.Secret in `secrets.json`
-- Replace the body of the try block...
-    - Create a variable holding the authorization token value by accessing `Request.Headers["Authorization"]` as a `string`, calling `String.Split()` with `" "` (empty space) passed, and accessing the last element of the resulting array
-    - Create a variable holding a new `JwtSecurityTokenHandler`
-    - Create a variable holding the `byte []` value of `_secret`
-    - Create a variable holding a new `TokenValidationParmeters` with...
-        - `true` as "ValidateIssuer", "ValidateAudience" and "ValidateIssuerSigningKey"
-        - `_issuer` as "ValidIssuer`
-        - `_audience` as "ValidAudience`
-        - A new `SymmetricSecurityKey` with the variable holding the `byte []` value of `_secret` passed into its constructor
-    - Create a variable holding the result of `tokenHandler.ValidateToken()` with the variable holding the authorization token, the variable holding the `TokenValidationParameters`, and `out var validatedToken`
-    - Create a variable holding a new `AuthenticationTicket` with the result of `tokenHandler.ValidateToken()` and `Scheme.Name` passed into its constructor
-    - Return `AuthenticateResult.Success(ticket)` with your `AuthenticationTicket` passed into `.Success()`
+In `HomeEnergyApi/Dtos/TokenDto.cs`
+- Create a public class `TokenDto` with a public property `Role` of type `string`
 
-In `HomeEnergyApi/Program.cs`
-- Replace the refrence to `BasicAuthenticationHandler` with `JwtAuthenticationHandler`
-- Replace any instance of `"BasicAuthenticationHandler"` with `JwtAuthenticationHandler`
+In `HomeEnergyApi/Controllers/HomeAdminController.cs`
+- Modify the Authorize attribute on the `CreateHome()` method to set it's policy to "AdminOnly"
+
+In `HomeEnergyApi/Controllers/HomeController.cs`
+- Add authorization to the `Bang()` method with the policy set to "UserOnly"
+
 
 ## Additional Information
 - Do not remove or modify anything in `HomeEnergyApi.Tests`
