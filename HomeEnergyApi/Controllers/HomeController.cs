@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using HomeEnergyApi.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 
 namespace HomeEnergyApi.Controllers
 {
@@ -42,6 +43,7 @@ namespace HomeEnergyApi.Controllers
             return Ok(home);
         }
 
+        [Authorize(Policy = "UserOnly")]
         [HttpGet("Bang")]
         public IActionResult Bang()
         {

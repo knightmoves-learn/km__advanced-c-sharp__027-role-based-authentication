@@ -24,13 +24,18 @@ namespace HomeEnergyApi.Controllers
         }
 
         [HttpPost("token")]
-        public IActionResult Token()
+        public IActionResult Token([FromBody] TokenDto tokenDto)
         {
-            string token = GenerateJwtToken();
+            if(string.IsNullOrEmpty(tokenDto.Role))
+            {
+                return BadRequest("Role is required.");
+            }
+
+            string token = GenerateJwtToken(tokenDto.Role);
             return Ok(new { token });
         }
 
-        private string GenerateJwtToken()
+        private string GenerateJwtToken(string role)
         {
             var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secret));
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
@@ -39,6 +44,7 @@ namespace HomeEnergyApi.Controllers
             {
             new Claim(JwtRegisteredClaimNames.Sub, "maria@knightmove.org"),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new Claim(ClaimTypes.Role, role)
         };
 
             var token = new JwtSecurityToken(
